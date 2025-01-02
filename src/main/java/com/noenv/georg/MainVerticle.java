@@ -12,6 +12,10 @@ import io.vertx.micrometer.MicrometerMetricsOptions;
 import io.vertx.micrometer.PrometheusScrapingHandler;
 import io.vertx.micrometer.VertxPrometheusOptions;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
 public class MainVerticle extends AbstractVerticle {
   public static final int SERVER_PORT = 7777;
   private static final Logger logger = LoggerFactory.getLogger(MainVerticle.class);
@@ -36,7 +40,8 @@ public class MainVerticle extends AbstractVerticle {
     ));
 
     vertx.createHttpServer()
-      .requestHandler(createRouter())
+      .requestHandler(createRouterWithSub())
+//      .requestHandler(createRouter())
       .listen(SERVER_PORT)
       .onSuccess(server -> {
         this.server = server;
@@ -66,6 +71,28 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   private Router createRouter() {
+    Router router = Router.router(vertx);
+    router.route().handler(ctx -> {
+      logger.info("Request matched path: " + ctx.request().path());
+      ctx.next();
+    });
+    router.route("/metrics").handler(PrometheusScrapingHandler.create());
+
+    router.route("/good").handler(ctx -> ctx.response().end("200 good -> version: " + getVertXVersion()));
+    router.route("/first/good").handler(ctx -> ctx.response().end("200 good -> version: " + getVertXVersion()));
+    router.route("/first/second/good").handler(ctx -> ctx.response().end("200 good -> version: " + getVertXVersion()));
+
+    router.route("/bad").handler(ctx -> ctx.fail(500));
+    router.route("/first/bad").handler(ctx -> ctx.fail(500));
+    router.route("/first/second/bad").handler(ctx -> ctx.fail(500));
+
+    router.route("/notfound").handler(ctx -> ctx.fail(404));
+    router.route("/first/notfound").handler(ctx -> ctx.fail(404));
+    router.route("/first/second/notfound").handler(ctx -> ctx.fail(404));
+    return router;
+  }
+
+  private Router createRouterWithSub() {
     Router router = getRouter();
     router.route().handler(ctx -> {
       logger.info("Request matched path: " + ctx.request().path());
@@ -84,6 +111,18 @@ public class MainVerticle extends AbstractVerticle {
     router.route("/bad").handler(ctx -> ctx.fail(500));
     router.route("/notfound").handler(ctx -> ctx.fail(404));
     return router;
+  }
+
+
+
+  private static String getVertXVersion() {
+    String value;
+    try (final var reader = new BufferedReader(new InputStreamReader(AbstractVerticle.class.getResource("/META-INF/vertx/vertx-version.txt").openStream()))) {
+      value = reader.readLine();
+    } catch (final IOException | RuntimeException cause) {
+      value = "unknown";
+    }
+    return value;
   }
 
 }
